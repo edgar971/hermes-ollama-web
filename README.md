@@ -1,5 +1,11 @@
 # hermes-ollama-web
 
+[![CI](https://github.com/edgar971/hermes-ollama-web/actions/workflows/ci.yml/badge.svg)](https://github.com/edgar971/hermes-ollama-web/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Checked with ty](https://img.shields.io/badge/types-ty-261230)](https://docs.astral.sh/ty/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Ollama **Web Search** and **Web Fetch** as a native Hermes Agent backend.
 
 It implements the `WebSearchProvider` ABC, so it backs the **built-in `web_search` and

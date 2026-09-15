@@ -77,6 +77,8 @@ like success.
 - Explain *why* in the body when the change isn't self-evident.
 - PRs: say what you changed, how you verified it, and what you did **not** verify.
 
+By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Releasing (maintainers)
 
 1. Bump `version` in `pyproject.toml`.
