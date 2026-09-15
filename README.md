@@ -1,0 +1,128 @@
+# hermes-ollama-web
+
+Ollama **Web Search** and **Web Fetch** as a native Hermes Agent backend.
+
+It implements the `WebSearchProvider` ABC, so it backs the **built-in `web_search` and
+`web_extract` tools** — no extra model-facing tools, no MCP hop, no prompt bloat. Every
+Hermes feature that sits on top of the web tools (result caching, character budgeting,
+`security.website_blocklist`, SSRF guards, keyless rescue, subagent coalescing) keeps
+working unchanged.
+
+| Hermes tool | Ollama endpoint |
+| --- | --- |
+| `web_search` | `POST https://ollama.com/api/web_search` |
+| `web_extract` | `POST https://ollama.com/api/web_fetch` (one call per URL) |
+
+Docs: <https://docs.ollama.com/capabilities/web-search>
+
+## Requirements
+
+- Hermes Agent (any version with web-search provider plugins)
+- A free Ollama account + API key: <https://ollama.com/settings/keys>
+- `uv` (dev + install), `ruff` (lint), `pytest` (tests)
+
+## Install
+
+### Option A — pip/uv install (recommended, shareable)
+
+Discovered through the `hermes_agent.plugins` entry point, so there is nothing to symlink.
+Install it **into the Hermes venv**:
+
+```bash
+uv pip install --python ~/.hermes/hermes-agent/venv/bin/python \
+  git+https://github.com/edgar971/hermes-ollama-web
+hermes plugins enable web-ollama
+```
+
+From a local checkout:
+
+```bash
+uv pip install --python ~/.hermes/hermes-agent/venv/bin/python -e ~/dev/hermes-ollama-web
+hermes plugins enable web-ollama
+```
+
+> Entry-point plugins are opt-in (only *bundled* backends auto-load), so the `enable` step is
+> required. Verify the venv path with `cat $(which hermes)` — installer layouts use `venv/`,
+> some git checkouts use `.venv/`.
+
+### Option B — directory plugin (local hacking)
+
+```bash
+mkdir -p "${HERMES_HOME:-$HOME/.hermes}/plugins/web"
+ln -sfn ~/dev/hermes-ollama-web/src/hermes_ollama_web \
+        "${HERMES_HOME:-$HOME/.hermes}/plugins/web/ollama"
+hermes plugins enable web/ollama
+```
+
+## Configure
+
+Key goes in `.env` (secrets only); backend selection goes in `config.yaml` via `hermes config set`
+— never hand-edit `config.yaml`.
+
+```bash
+# ~/.hermes/.env
+OLLAMA_API_KEY=<your key>
+```
+
+```bash
+# use Ollama for both capabilities
+hermes config set web.backend ollama
+
+# or per-capability, e.g. Ollama search + Firecrawl extract
+hermes config set web.search_backend ollama
+hermes config set web.extract_backend firecrawl
+```
+
+`hermes tools` → **Web Search & Extract** also lists it (“Ollama Web Search”) and prompts for the key.
+
+Optional: point at a proxy or gateway with `OLLAMA_WEB_BASE_URL` (default `https://ollama.com`).
+
+## Verify
+
+```bash
+hermes plugins list | grep -i ollama                       # → web-ollama  enabled
+source ~/.hermes/hermes-agent/venv/bin/activate && python -m tools.web_tools   # prints active backend
+hermes chat -q 'Use web_search to find the Ollama web search docs, then web_extract that URL.'
+```
+
+`hermes setup` shows `✅ Web Search & Extract (ollama)` once selected.
+
+## Behaviour notes
+
+- `max_results` is clamped to **10** (Ollama's server-side cap).
+- `web_fetch` takes a single URL, so `web_extract` on N URLs issues N sequential requests;
+  a failure on one URL becomes a per-URL `error` entry and never fails the batch.
+- Search timeout 30 s, fetch timeout 60 s per URL. Hermes additionally bounds the whole
+  extract dispatch with `web.extract_timeout`.
+- `format` / `include_raw` / `max_chars` extract kwargs are ignored — Ollama returns markdown-ish
+  content only. Truncation and the on-disk full-text spill are handled by Hermes.
+- Ollama returns discovered `links` for a fetched page; they are preserved in `metadata.links`.
+
+## Development
+
+```bash
+uv sync --all-groups
+uv run ruff check .
+uv run pytest
+```
+
+Tests use `respx` to mock the Ollama HTTP API — no network, no key needed. `tests/conftest.py`
+imports the **real** `agent.web_search_provider` ABC from `$HERMES_REPO` (default
+`~/.hermes/hermes-agent`) when available so the contract is checked against actual Hermes code,
+and falls back to a minimal stand-in in CI.
+
+## Why a provider plugin instead of an MCP server or custom tools
+
+Ollama ships an MCP server example, and you *could* register `ollama_web_search` /
+`ollama_web_fetch` as new tools. Both are worse here:
+
+- **MCP** adds a subprocess, a second tool surface, and duplicate tool descriptions the model
+  must disambiguate from `web_search`.
+- **Custom tools** bypass Hermes' web pipeline: no result cache, no char budget, no blocklist,
+  no `hermes tools` integration.
+
+A `WebSearchProvider` swaps only the transport underneath the tools the agent already knows.
+
+## License
+
+MIT
