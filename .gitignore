@@ -6,4 +6,8 @@ build/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.ty_cache/
+
+# An application would commit uv.lock; a library must resolve against a range of versions,
+# and CI needs to catch upstream breakage rather than pin around it.
 uv.lock
