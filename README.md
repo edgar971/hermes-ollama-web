@@ -121,14 +121,19 @@ hermes chat -q 'Use web_search to find the Ollama web search docs, then web_extr
 
 ```bash
 uv sync --all-groups
-uv run ruff check .
-uv run pytest
+uv run ruff check .      # lint
+uv run ruff format .     # format
+uv run ty check          # types
+uv run pytest            # tests
 ```
 
 Tests use `respx` to mock the Ollama HTTP API — no network, no key needed. `tests/conftest.py`
 imports the **real** `agent.web_search_provider` ABC from `$HERMES_REPO` (default
 `~/.hermes/hermes-agent`) when available so the contract is checked against actual Hermes code,
-and falls back to a minimal stand-in in CI.
+and falls back to `tests/stubs/` in CI.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, and [SECURITY.md](SECURITY.md)
+for how the API key is handled.
 
 ## Why a provider plugin instead of an MCP server or custom tools
 

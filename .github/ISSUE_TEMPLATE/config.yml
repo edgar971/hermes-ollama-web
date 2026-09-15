@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Hermes Agent docs
+    url: https://hermes-agent.nousresearch.com/docs/user-guide/features/web-search
+    about: How Hermes' web_search / web_extract and backend selection work.
+  - name: Ollama web search API docs
+    url: https://docs.ollama.com/capabilities/web-search
+    about: Upstream API behaviour, limits, and API keys.
+  - name: Security issue
+    url: https://github.com/edgar971/hermes-ollama-web/security/advisories/new
+    about: Report a vulnerability privately — do not open a public issue.

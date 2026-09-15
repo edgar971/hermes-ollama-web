@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a capability or behaviour change
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This package deliberately does one thing: back Hermes' `web_search` / `web_extract`
+        with Ollama's API. Requests that add unrelated tools or a second tool surface are
+        usually better as their own plugin — see CONTRIBUTING.md.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that you can't today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - web_search behaviour
+        - web_extract behaviour
+        - configuration / env vars
+        - packaging / install
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Upstream support
+      description: >
+        Does the Ollama API support this today? Link the relevant part of
+        https://docs.ollama.com/capabilities/web-search — we can't expose what the API doesn't return.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including whether an existing Hermes web backend already does this.

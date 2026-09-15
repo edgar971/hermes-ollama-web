@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in the plugin misbehaves
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please redact your API key from every command output you paste.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. hermes config set web.backend ollama
+        2. hermes chat -q '...'
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: capability
+    attributes:
+      label: Which capability
+      options:
+        - web_search
+        - web_extract
+        - both
+        - plugin loading / discovery
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: tool-output
+    attributes:
+      label: Tool output or error
+      description: The JSON envelope or traceback. Redact secrets.
+      render: text
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "Output of: `hermes --version`, `python -V`, and this plugin's version"
+      placeholder: "hermes 1.2.3, python 3.12.4, hermes-ollama-web 0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-mode
+    attributes:
+      label: Install mode
+      options:
+        - pip / uv entry point
+        - directory plugin (symlinked into $HERMES_HOME/plugins/web)
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: web-config
+    attributes:
+      label: Relevant web config
+      description: "Output of `hermes config get web.backend` plus any per-capability keys."
+      render: text
+
+  - type: checkboxes
+    id: ruled-out
+    attributes:
+      label: Ruled out
+      options:
+        - label: "`hermes plugins list` shows web-ollama as **enabled**"
+        - label: I disabled `web.keyless_fallback` and `web.keyless_rescue` while testing, so Hermes' keyless ring isn't masking or serving the result
+        - label: The same request works against the Ollama API directly (`curl`)

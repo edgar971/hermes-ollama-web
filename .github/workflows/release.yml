@@ -1,0 +1,49 @@
+name: Release
+
+# Publishes to PyPI when a version tag is pushed. Requires a PyPI Trusted Publisher
+# configured for this repo plus a `pypi` environment — no API token is stored anywhere.
+# Docs: https://docs.pypi.org/trusted-publishers/
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      # Never ship a tag that fails its own gates.
+      - run: uv run ruff check .
+      - run: uv run ty check
+      - run: uv run pytest
+      - name: Tag must match the project version
+        run: uv run python scripts/check_version_matches_tag.py "${GITHUB_REF_NAME}"
+      - run: uv build
+      - name: Check package metadata
+        run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@v1.14.2

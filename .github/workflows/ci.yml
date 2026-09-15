@@ -1,27 +1,75 @@
-name: ci
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A new push to the same ref cancels the previous run — no queue of stale jobs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  lint:
+    name: Lint & types
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-      - run: uv sync --all-groups --python ${{ matrix.python-version }}
-      - name: Lint
-        run: uv run ruff check .
-      - name: Format check
-        run: uv run ruff format --check .
-      - name: Tests
-        run: uv run pytest
-      - name: Build wheel
-        run: uv build
+      - run: uv sync --all-groups
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+      - name: ty
+        run: uv run ty check
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --all-groups
+      # No Hermes checkout on the runner, so conftest resolves the ABC from tests/stubs.
+      - run: uv run pytest -v
+
+  build:
+    name: Build & verify wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv build
+      - name: Check package metadata
+        run: uvx twine check dist/*
+      - name: plugin.yaml must ship inside the wheel
+        # Hermes reads plugin.yaml at discovery time. If the force-include regresses, the pip
+        # install silently loses parity with directory mode — fail loudly instead.
+        run: |
+          python -m zipfile -l dist/*.whl | tee /tmp/wheel.txt
+          grep -q 'hermes_ollama_web/plugin.yaml' /tmp/wheel.txt
+      - name: Entry point must be declared
+        run: |
+          python -m zipfile -e dist/*.whl /tmp/whl
+          grep -rq 'hermes_agent.plugins' /tmp/whl/*.dist-info/entry_points.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
