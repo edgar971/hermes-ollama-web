@@ -75,7 +75,19 @@ hermes config set web.extract_backend firecrawl
 
 `hermes tools` → **Web Search & Extract** also lists it (“Ollama Web Search”) and prompts for the key.
 
-Optional: point at a proxy or gateway with `OLLAMA_WEB_BASE_URL` (default `https://ollama.com`).
+Optional knobs:
+
+- `OLLAMA_WEB_BASE_URL` — proxy/gateway base (default `https://ollama.com`)
+- `OLLAMA_SEARCH_SNIPPET_CHARS` — per-result search snippet budget (default `1200`, `0` = no trimming)
+
+### 1Password instead of plaintext (optional)
+
+Hermes can resolve the key from 1Password at startup, so it never sits in `.env`:
+
+```bash
+hermes secrets onepassword set OLLAMA_API_KEY "op://<Vault>/<Item>/credential"
+hermes secrets onepassword sync     # dry-run
+```
 
 ## Verify
 
@@ -90,6 +102,13 @@ hermes chat -q 'Use web_search to find the Ollama web search docs, then web_extr
 ## Behaviour notes
 
 - `max_results` is clamped to **10** (Ollama's server-side cap).
+- **Search results carry full page content, not snippets.** Measured live: ~10k chars *per result*,
+  so an untrimmed `limit=5` search is ~50k chars (~13k tokens) of context. Hermes applies its char
+  budget to `web_extract` only, never to `web_search`, so this provider trims each result to
+  `OLLAMA_SEARCH_SNIPPET_CHARS` (default 1200) on a word boundary and marks the cut. Same query at
+  `limit=5`: **7.5k chars instead of ~50k**. Use `web_extract` when you want a page in full.
+- Ollama sometimes returns `title: ""` (seen on raw `.md` URLs); the provider substitutes a
+  `host — last-path-segment` label so results never render as blank to the model.
 - `web_fetch` takes a single URL, so `web_extract` on N URLs issues N sequential requests;
   a failure on one URL becomes a per-URL `error` entry and never fails the batch.
 - Search timeout 30 s, fetch timeout 60 s per URL. Hermes additionally bounds the whole

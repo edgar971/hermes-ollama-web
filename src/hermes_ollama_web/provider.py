@@ -32,6 +32,14 @@ SEARCH_LIMIT_CAP = 10
 SEARCH_TIMEOUT_S = 30.0
 FETCH_TIMEOUT_S = 60.0
 
+#: Ollama's ``web_search`` returns FULL page content per result (~10k chars each), not a
+#: snippet like index-backed vendors. ``web_search`` has no Hermes-side char budget (only
+#: ``web_extract`` does), so an unbudgeted limit=5 search would push ~50k chars into context.
+#: Snippets are trimmed on a word boundary; use ``web_extract`` to get a page in full.
+#: Override with ``OLLAMA_SEARCH_SNIPPET_CHARS`` (0 disables trimming).
+SNIPPET_CHARS_ENV = "OLLAMA_SEARCH_SNIPPET_CHARS"
+DEFAULT_SNIPPET_CHARS = 1200
+
 
 def _env(name: str, default: str = "") -> str:
     """Config-aware env lookup: ``os.environ`` first, then ``~/.hermes/.env``.
@@ -51,6 +59,44 @@ def _env(name: str, default: str = "") -> str:
 
 def _base_url() -> str:
     return _env(BASE_URL_ENV, DEFAULT_BASE_URL).rstrip("/")
+
+
+def _snippet_budget() -> int:
+    """Per-result content budget for ``search()``; ``0`` means "return it whole"."""
+    raw = _env(SNIPPET_CHARS_ENV)
+    if not raw:
+        return DEFAULT_SNIPPET_CHARS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using %d", SNIPPET_CHARS_ENV, raw, DEFAULT_SNIPPET_CHARS)
+        return DEFAULT_SNIPPET_CHARS
+
+
+def _snippet(content: str, budget: int) -> str:
+    """Trim *content* to *budget* chars on a word boundary, marking the cut."""
+    if budget <= 0 or len(content) <= budget:
+        return content
+    cut = content[:budget]
+    space = cut.rfind(" ")
+    if space > budget // 2:  # only honour the boundary when it isn't a pathological cut
+        cut = cut[:space]
+    return f"{cut.rstrip()}… [truncated — use web_extract for the full page]"
+
+
+def _title_from_url(url: str) -> str:
+    """Readable label for a result Ollama returned with no title (host + last path segment)."""
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return url
+    host = parsed.netloc
+    tail = (parsed.path or "").rstrip("/").rsplit("/", 1)[-1]
+    if host and tail:
+        return f"{host} — {tail}"
+    return host or url
 
 
 def _post(path: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -113,17 +159,28 @@ class OllamaWebSearchProvider(WebSearchProvider):
         except ValueError as exc:
             return {"success": False, "error": str(exc)}
         rows = data.get("results") or []
-        web = [
-            {
-                "title": str(item.get("title") or ""),
-                "url": str(item.get("url") or ""),
-                "description": str(item.get("content") or ""),
-                "position": index,
-            }
-            for index, item in enumerate(rows[:max_results], start=1)
-            if isinstance(item, dict)
-        ]
-        logger.info("Ollama web_search %r: %d result(s) (limit=%d)", query, len(web), max_results)
+        budget = _snippet_budget()
+        web = []
+        for index, item in enumerate((row for row in rows[:max_results] if isinstance(row, dict)), start=1):
+            url = str(item.get("url") or "")
+            # Ollama sometimes returns an empty title (e.g. raw .md URLs). An empty title
+            # reads as a broken result to the model, so fall back to the URL's own label.
+            title = str(item.get("title") or "").strip() or _title_from_url(url)
+            web.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "description": _snippet(str(item.get("content") or ""), budget),
+                    "position": index,
+                }
+            )
+        logger.info(
+            "Ollama web_search %r: %d result(s) (limit=%d, snippet_budget=%d)",
+            query,
+            len(web),
+            max_results,
+            budget,
+        )
         return {"success": True, "data": {"web": web}}
 
     def extract(self, urls: list[str], **kwargs: Any) -> list[dict[str, Any]]:

@@ -16,6 +16,7 @@ FETCH_URL = "https://ollama.com/api/web_fetch"
 def provider(monkeypatch):
     monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
     monkeypatch.delenv("OLLAMA_WEB_BASE_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_SEARCH_SNIPPET_CHARS", raising=False)
     return OllamaWebSearchProvider()
 
 
@@ -156,6 +157,59 @@ def test_base_url_override(monkeypatch, provider):
     )
     provider.search("q")
     assert route.called
+
+
+@respx.mock
+def test_search_trims_long_content_to_snippet_budget(provider):
+    """Ollama returns full page content per result; unbudgeted that floods context."""
+    body = "word " * 4000  # 20k chars
+    respx.post(SEARCH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"title": "T", "url": "https://e.example", "content": body}]}
+        )
+    )
+    hit = provider.search("q", limit=1)["data"]["web"][0]
+
+    assert len(hit["description"]) < 1400
+    assert hit["description"].endswith("[truncated — use web_extract for the full page]")
+
+
+@respx.mock
+def test_snippet_budget_env_override_disables_trimming(monkeypatch, provider):
+    monkeypatch.setenv("OLLAMA_SEARCH_SNIPPET_CHARS", "0")
+    body = "word " * 4000
+    respx.post(SEARCH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"title": "T", "url": "https://e.example", "content": body}]}
+        )
+    )
+    assert provider.search("q", limit=1)["data"]["web"][0]["description"] == body
+
+
+@respx.mock
+def test_short_content_is_not_trimmed(provider):
+    respx.post(SEARCH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"title": "T", "url": "https://e.example", "content": "short"}]}
+        )
+    )
+    assert provider.search("q", limit=1)["data"]["web"][0]["description"] == "short"
+
+
+@respx.mock
+def test_empty_title_falls_back_to_url_label(provider):
+    """Observed live: raw .md URLs come back with title="" — an empty title looks broken."""
+    respx.post(SEARCH_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "", "url": "https://docs.ollama.com/capabilities/web-search.md", "content": "c"}
+                ]
+            },
+        )
+    )
+    assert provider.search("q", limit=1)["data"]["web"][0]["title"] == ("docs.ollama.com — web-search.md")
 
 
 def test_setup_schema_shape(provider):
