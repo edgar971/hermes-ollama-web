@@ -101,12 +101,20 @@ hermes chat -q 'Use web_search to find the Ollama web search docs, then web_extr
 
 ## Behaviour notes
 
-- `max_results` is clamped to **10** (Ollama's server-side cap).
+- `max_results` is clamped to **10** (Ollama's server-side cap). Verified server-side honoured:
+  `limit=2` → 2 results, `limit=7` → 7. (The official JS SDK sent camelCase `maxResults`, which
+  the API silently ignored — [ollama-js#283][js283]. This plugin sends snake_case.)
+- **There is an hourly rate limit on the free tier, and hitting it is abrupt.** Measured: 8
+  searches succeeded at ~0.9 s each, then every following call returned
+  `HTTP 429 "you have reached your web search hourly request limit"` in ~0.2 s. The fast failure
+  is the tell — a 429 comes back quicker than a real search. Budget accordingly for agent loops,
+  which can burn a dozen searches in one task, and consider keeping a second backend configured
+  for `web_search` so a 429 doesn't stall the run.
 - **Search results carry full page content, not snippets.** Measured live: ~10k chars *per result*,
   so an untrimmed `limit=5` search is ~50k chars (~13k tokens) of context. Hermes applies its char
   budget to `web_extract` only, never to `web_search`, so this provider trims each result to
   `OLLAMA_SEARCH_SNIPPET_CHARS` (default 1200) on a word boundary and marks the cut. Same query at
-  `limit=5`: **7.5k chars instead of ~50k**. Use `web_extract` when you want a page in full.
+  `limit=5`: **~7.4k chars instead of ~50k**. Use `web_extract` when you want a page in full.
 - Ollama sometimes returns `title: ""` (seen on raw `.md` URLs); the provider substitutes a
   `host — last-path-segment` label so results never render as blank to the model.
 - `web_fetch` takes a single URL, so `web_extract` on N URLs issues N sequential requests;
@@ -116,6 +124,26 @@ hermes chat -q 'Use web_search to find the Ollama web search docs, then web_extr
 - `format` / `include_raw` / `max_chars` extract kwargs are ignored — Ollama returns markdown-ish
   content only. Truncation and the on-disk full-text spill are handled by Hermes.
 - Ollama returns discovered `links` for a fetched page; they are preserved in `metadata.links`.
+- Transient `HTTP 502 {"error": "search service error"}` happens; retry before debugging.
+
+### Result quality
+
+Probed across 8 consumer/technical categories (cars, lawn care, cooking, home repair, health,
+finance) at `limit=5`: **mean 0.89 s, 4.5/5 unique hosts, zero duplicate or mirrored URLs, zero
+blank titles.** Top hits skewed authoritative — `irs.gov` for tax limits, Clemson HGIC and
+university extension services for turf, Consumer Reports for vehicles, Springer and Stronger by
+Science for sports nutrition.
+
+Technical/docs queries are where it gets noisier: it does content-matching, so it will happily
+return both a docs page and that same page's raw `.md` mirror as separate results. If you mainly
+search docs, pair a ranked index for search with Ollama for fetch:
+
+```bash
+hermes config set web.search_backend brave-free
+hermes config set web.extract_backend ollama
+```
+
+[js283]: https://github.com/ollama/ollama-js/issues/283
 
 ## Development
 
