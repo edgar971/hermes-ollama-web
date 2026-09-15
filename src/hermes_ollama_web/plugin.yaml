@@ -1,0 +1,17 @@
+name: web-ollama
+version: 0.1.0
+description: "Ollama Web Search + Web Fetch — backs the built-in web_search and web_extract tools with Ollama's hosted search API. Requires OLLAMA_API_KEY (free account: https://ollama.com/settings/keys)."
+author: Edgar Pino
+license: MIT
+homepage: https://github.com/edgar971/hermes-ollama-web
+manifest_version: 2
+kind: backend
+provides_web_providers:
+  - ollama
+requires_env:
+  - OLLAMA_API_KEY
+optional_env:
+  - OLLAMA_WEB_BASE_URL
+tags:
+  - web-search
+  - ollama
