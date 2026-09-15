@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from conftest import ABC_SOURCE
 from hermes_ollama_web import OllamaWebSearchProvider, register
 
 SEARCH_URL = "https://ollama.com/api/web_search"
@@ -26,6 +27,17 @@ def test_identity_and_capabilities(provider):
     assert provider.supports_search() is True
     assert provider.supports_extract() is True
     assert provider.is_available() is True
+
+
+def test_provider_satisfies_the_abc_contract(provider):
+    """Instantiating at all proves every abstract member is implemented.
+
+    Locally this runs against the REAL Hermes ABC (see conftest); CI uses the stub.
+    """
+    from agent.web_search_provider import WebSearchProvider
+
+    assert isinstance(provider, WebSearchProvider)
+    assert ABC_SOURCE.startswith(("hermes:", "stub:"))
 
 
 def test_is_available_false_without_key(monkeypatch):
